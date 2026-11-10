@@ -1,0 +1,377 @@
+'use client';
+
+import { useEffect, useState, useCallback } from 'react';
+import { toast } from 'sonner';
+import { Plus, RefreshCw, Gavel, Check, X, Calculator } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Slider } from '@/components/ui/slider';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Progress } from '@/components/ui/progress';
+import { apiFetch, fmtMoney, fmtDate, fmtDateTime, type Policy, type Claim, StatusBadge } from './shared';
+import { SectionCard } from './shared';
+
+interface AssessmentResponse {
+  claim: Claim;
+  assessment: {
+    stage: string;
+    stageKyFactor: number;
+    daysSown: number;
+    replantCutoff: number;
+    damageDepthRatio: number;
+    sumInsured: number;
+    inputCost: number;
+    payout: number;
+    type: 'REPLANT_ALLOWANCE' | 'FULL_INDEMNITY';
+    lossSeverityRatio?: number;
+  };
+}
+
+export function ClaimsTab() {
+  const [claims, setClaims] = useState<Claim[]>([]);
+  const [policies, setPolicies] = useState<Policy[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const [open, setOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState({
+    policyId: '',
+    incidentDate: new Date().toISOString().slice(0, 10),
+    damageDepth: 0.5,
+  });
+
+  const [assessingId, setAssessingId] = useState<string | null>(null);
+  const [assessment, setAssessment] = useState<AssessmentResponse | null>(null);
+  const [assessOpen, setAssessOpen] = useState(false);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [c, p] = await Promise.all([
+        apiFetch<Claim[]>('/api/claims'),
+        apiFetch<Policy[]>('/api/policies'),
+      ]);
+      setClaims(c);
+      setPolicies(p);
+    } catch (e) {
+      toast.error('Failed to load claims', { description: (e as Error).message });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void reload();
+  }, [reload, refreshKey]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.policyId) return toast.error('Please select a policy');
+    if (!form.incidentDate) return toast.error('Incident date is required');
+
+    setSubmitting(true);
+    try {
+      const created = await apiFetch<Claim>('/api/claims', {
+        method: 'POST',
+        body: JSON.stringify({
+          policyId: form.policyId,
+          incidentDate: form.incidentDate,
+          damageDepthRatio: form.damageDepth,
+        }),
+      });
+      toast.success('Claim filed', {
+        description: `${created.assetType} claim · damage depth ${(created.damageDepthRatio * 100).toFixed(0)}%`,
+      });
+      setForm({ ...form, policyId: '' });
+      setOpen(false);
+      setRefreshKey((k) => k + 1);
+    } catch (e) {
+      toast.error('Failed to file claim', { description: (e as Error).message });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleAssess(claimId: string) {
+    setAssessingId(claimId);
+    try {
+      const res = await apiFetch<AssessmentResponse>('/api/claims/assess', {
+        method: 'POST',
+        body: JSON.stringify({ claimId }),
+      });
+      setAssessment(res);
+      setAssessOpen(true);
+      setRefreshKey((k) => k + 1);
+      toast.success('Assessment complete', {
+        description: `${res.assessment.type} · payout ${fmtMoney(res.assessment.payout)}`,
+      });
+    } catch (e) {
+      toast.error('Assessment failed', { description: (e as Error).message });
+    } finally {
+      setAssessingId(null);
+    }
+  }
+
+  async function handleApprove(claimId: string) {
+    try {
+      await apiFetch<Claim>('/api/claims/approve', {
+        method: 'POST',
+        body: JSON.stringify({ claimId }),
+      });
+      toast.success('Claim approved', { description: 'Ready for disbursement in the Settlements tab' });
+      setRefreshKey((k) => k + 1);
+    } catch (e) {
+      toast.error('Approval failed', { description: (e as Error).message });
+    }
+  }
+
+  async function handleReject(claimId: string) {
+    try {
+      await apiFetch<Claim>('/api/claims/reject', {
+        method: 'POST',
+        body: JSON.stringify({ claimId }),
+      });
+      toast.info('Claim rejected');
+      setRefreshKey((k) => k + 1);
+    } catch (e) {
+      toast.error('Reject failed', { description: (e as Error).message });
+    }
+  }
+
+  return (
+    <>
+      <SectionCard
+        title="Claims"
+        description={`${claims.length} claims filed · loss engine uses FAO Ky factors per crop variety & growth stage`}
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setRefreshKey((k) => k + 1)} disabled={loading}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
+            </Button>
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" className="bg-[#0C3B2E] text-white hover:bg-[#0C3B2E]/90">
+                  <Plus className="mr-2 h-4 w-4" /> File Claim
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>File an insurance claim</DialogTitle>
+                  <DialogDescription>
+                    The system auto-determines the growth stage from the incident date and the policy&apos;s coverage start. The loss engine then computes the payout using the FAO Ky factor for that stage.
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="policy">Policy</Label>
+                    <Select value={form.policyId} onValueChange={(v) => setForm({ ...form, policyId: v })}>
+                      <SelectTrigger id="policy"><SelectValue placeholder="Select policy" /></SelectTrigger>
+                      <SelectContent>
+                        {policies.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.assetType} · {p.farmer?.name} · {p.variety?.name ?? p.livestock?.uniqueTagId ?? '—'} · Sum {fmtMoney(p.sumInsured)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="incident">Incident date</Label>
+                    <Input id="incident" type="date" value={form.incidentDate} onChange={(e) => setForm({ ...form, incidentDate: e.target.value })} />
+                    <p className="text-xs text-slate-500">Used to compute days-since-coverage-start → growth stage.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="damage">Damage depth</Label>
+                      <span className="rounded bg-slate-100 px-2 py-0.5 text-sm font-semibold tabular-nums text-slate-700">
+                        {(form.damageDepth * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                    <Slider
+                      id="damage"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={[Math.round(form.damageDepth * 100)]}
+                      onValueChange={(v) => setForm({ ...form, damageDepth: v[0] / 100 })}
+                    />
+                    <p className="text-xs text-slate-500">0 = no damage · 1 = total loss. Multiplied by the stage Ky factor to get the effective loss ratio.</p>
+                  </div>
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+                    <Button type="submit" disabled={submitting} className="bg-[#0C3B2E] text-white hover:bg-[#0C3B2E]/90">
+                      {submitting ? 'Filing…' : 'File claim'}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </>
+        }
+      >
+        {loading ? (
+          <p className="text-sm text-slate-500">Loading claims…</p>
+        ) : claims.length === 0 ? (
+          <p className="text-sm text-slate-500">No claims filed yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Claim</TableHead>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Asset</TableHead>
+                  <TableHead>Incident</TableHead>
+                  <TableHead>Stage</TableHead>
+                  <TableHead className="text-right">Damage</TableHead>
+                  <TableHead className="text-right">Payout</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {claims.map((c) => (
+                  <TableRow key={c.id}>
+                    <TableCell className="font-mono text-xs text-slate-500">{c.id.slice(-8)}</TableCell>
+                    <TableCell className="font-mono text-xs text-slate-500">{c.policyId.slice(-8)}</TableCell>
+                    <TableCell>
+                      <span className={c.assetType === 'CROP' ? 'text-emerald-700' : 'text-amber-700'}>{c.assetType}</span>
+                    </TableCell>
+                    <TableCell className="text-slate-500">{fmtDate(c.incidentDate)}</TableCell>
+                    <TableCell className="text-slate-600">{c.growthStageAtLoss ?? '—'}</TableCell>
+                    <TableCell className="text-right tabular-nums">{(c.damageDepthRatio * 100).toFixed(0)}%</TableCell>
+                    <TableCell className="text-right tabular-nums">{c.calculatedPayout ? fmtMoney(c.calculatedPayout) : '—'}</TableCell>
+                    <TableCell className="text-xs text-slate-500">{c.payoutType ?? '—'}</TableCell>
+                    <TableCell><StatusBadge status={c.status} /></TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        {c.status === 'SUBMITTED' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleAssess(c.id)}
+                            disabled={assessingId === c.id}
+                            title="Run loss engine"
+                          >
+                            {assessingId === c.id ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Calculator className="h-3.5 w-3.5" />}
+                            <span className="ml-1 hidden sm:inline">Assess</span>
+                          </Button>
+                        )}
+                        {c.status === 'ASSESSED' && (
+                          <>
+                            <Button size="sm" variant="outline" onClick={() => handleAssess(c.id)} title="Re-assess">
+                              <Calculator className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button size="sm" variant="outline" className="border-emerald-300 text-emerald-700 hover:bg-emerald-50" onClick={() => handleApprove(c.id)} title="Approve">
+                              <Check className="h-3.5 w-3.5" />
+                              <span className="ml-1 hidden sm:inline">Approve</span>
+                            </Button>
+                            <Button size="sm" variant="outline" className="border-rose-300 text-rose-700 hover:bg-rose-50" onClick={() => handleReject(c.id)} title="Reject">
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
+                        )}
+                        {(c.status === 'APPROVED' || c.status === 'PAID') && (
+                          <span className="text-xs text-slate-400">
+                            {c.status === 'PAID' ? 'Settled' : 'Awaiting disbursement'}
+                          </span>
+                        )}
+                        {c.status === 'REJECTED' && (
+                          <span className="text-xs text-rose-600">Rejected</span>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <p className="mt-3 text-xs text-slate-400">Most recent: {claims[0] ? fmtDateTime(claims[0].createdAt) : '—'}</p>
+          </div>
+        )}
+      </SectionCard>
+
+      {/* Assessment breakdown dialog */}
+      <Dialog open={assessOpen} onOpenChange={setAssessOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              <span className="inline-flex items-center gap-2">
+                <Gavel className="h-5 w-5 text-[#0C3B2E]" /> Loss engine breakdown
+              </span>
+            </DialogTitle>
+            <DialogDescription>
+              Calculated using the FAO Stage × Depth algorithm. Replant cap applies in EMERGENCE or before the replant cutoff day.
+            </DialogDescription>
+          </DialogHeader>
+          {assessment && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <Field label="Sum insured" value={fmtMoney(assessment.assessment.sumInsured)} />
+                <Field label="Input cost" value={fmtMoney(assessment.assessment.inputCost)} />
+                <Field label="Days sown" value={`${assessment.assessment.daysSown}`} />
+                <Field label="Replant cutoff" value={`Day ${assessment.assessment.replantCutoff}`} />
+                <Field label="Growth stage" value={assessment.assessment.stage} />
+                <Field label="FAO Ky factor" value={assessment.assessment.stageKyFactor.toFixed(2)} />
+                <Field label="Damage depth" value={`${(assessment.assessment.damageDepthRatio * 100).toFixed(0)}%`} />
+                <Field
+                  label="Payout type"
+                  value={assessment.assessment.type === 'REPLANT_ALLOWANCE' ? 'Replant allowance' : 'Full indemnity'}
+                />
+              </div>
+
+              {assessment.assessment.lossSeverityRatio !== undefined && (
+                <div>
+                  <div className="mb-1 flex items-center justify-between text-sm">
+                    <span className="text-slate-600">Loss severity ratio</span>
+                    <span className="font-semibold text-slate-900">{(assessment.assessment.lossSeverityRatio * 100).toFixed(1)}%</span>
+                  </div>
+                  <Progress value={assessment.assessment.lossSeverityRatio * 100} className="h-2 bg-slate-100 [&>div]:bg-[#2A7A65]" />
+                  <p className="mt-1 text-xs text-slate-500">= damageDepth × Ky (clamped to [0, 1])</p>
+                </div>
+              )}
+
+              {assessment.assessment.type === 'REPLANT_ALLOWANCE' && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                  <strong>Replant cap applied:</strong> payout = min(inputCost × damageDepth, sumInsured × 25%).
+                  This bounds early-stage claims to a replanting allowance rather than a full indemnity.
+                </div>
+              )}
+              {assessment.assessment.type === 'FULL_INDEMNITY' && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+                  <strong>Full indemnity:</strong> payout = sumInsured × effectiveLossRatio.
+                  Beyond the replant window, the policy pays out proportionally to the FAO-weighted loss.
+                </div>
+              )}
+
+              <div className="rounded-lg border-2 border-[#0C3B2E] bg-[#0C3B2E]/5 p-4 text-center">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Calculated payout</p>
+                <p className="mt-1 text-3xl font-bold text-[#0C3B2E]">{fmtMoney(assessment.assessment.payout)}</p>
+              </div>
+
+              <p className="text-xs text-slate-400">
+                The claim has been moved to <strong>ASSESSED</strong>. Click <strong>Approve</strong> in the table to authorise disbursement.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setAssessOpen(false)} className="bg-[#0C3B2E] text-white hover:bg-[#0C3B2E]/90">Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="mt-0.5 font-semibold text-slate-900">{value}</p>
+    </div>
+  );
+}
