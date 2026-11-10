@@ -173,6 +173,48 @@ export interface Settlement {
   claim?: Claim;
 }
 
+// ── Spatial damage map types (returned by /api/spatial/damage-map) ──
+export interface DamageMapFeature {
+  type: 'Feature';
+  geometry: GeoJSON.Polygon;
+  properties: {
+    plotId: string;
+    plotName: string;
+    farmerName: string | null;
+    region: string | null;
+    cropType: string | null;
+    areaHectares: number;
+    overlappingIds: string[];
+    hasActiveClaim: boolean;
+    claimCount: number;
+    latestClaimStatus: string | null;
+    latestDamageDepth: number | null;
+    latestPayout: number | null;
+    calculatedPayout: number;
+    imageAnalysisSeverity: number | null;
+    imageAnalysisDamageType: string | null;
+    latestNdvi: number | null;
+    ndviAlert: boolean;
+    rainfall14d: number | null;
+    droughtAlert: boolean;
+    damageScore: number;
+    damageLevel: 'none' | 'low' | 'moderate' | 'severe' | 'total';
+  };
+}
+
+export interface DamageMapResponse {
+  type: 'FeatureCollection';
+  features: DamageMapFeature[];
+  bbox: [number, number, number, number] | null;
+  summary: {
+    totalPlots: number;
+    plotsWithClaims: number;
+    plotsWithAlerts: number;
+    totalPayout: number;
+    averageDamageScore: number;
+  };
+}
+
 export interface Dashboard {
   counts: {
     farmers: number;

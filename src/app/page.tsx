@@ -1,7 +1,8 @@
 'use client';
 
-import { Sprout, LayoutDashboard, Map, Beef, FileText, Satellite, Gavel, Banknote, Leaf, CloudSun } from 'lucide-react';
+import { Sprout, LayoutDashboard, Map, Beef, FileText, Satellite, Gavel, Banknote, Leaf, CloudSun, MapPinned } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import dynamic from 'next/dynamic';
 import { DashboardTab } from '@/components/agri/dashboard-tab';
 import { PlotsTab } from '@/components/agri/plots-tab';
 import { LivestockTab } from '@/components/agri/livestock-tab';
@@ -11,6 +12,17 @@ import { ClaimsTab } from '@/components/agri/claims-tab';
 import { SettlementsTab } from '@/components/agri/settlements-tab';
 import { WeatherTab } from '@/components/agri/weather-tab';
 
+// Leaflet requires window — load the DamageMap only on the client.
+const DamageMapTab = dynamic(() => import('@/components/agri/damage-map-tab').then((m) => m.DamageMapTab), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-96 items-center justify-center text-sm text-slate-500">
+      <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-[#0C3B2E]" />
+      <span className="ml-2">Loading Leaflet map…</span>
+    </div>
+  ),
+});
+
 const TABS = [
   { value: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { value: 'plots', label: 'Plots', icon: Map },
@@ -18,6 +30,7 @@ const TABS = [
   { value: 'policies', label: 'Policies', icon: FileText },
   { value: 'telemetry', label: 'Telemetry', icon: Satellite },
   { value: 'weather', label: 'Weather', icon: CloudSun },
+  { value: 'damagemap', label: 'Damage Map', icon: MapPinned },
   { value: 'claims', label: 'Claims', icon: Gavel },
   { value: 'settlements', label: 'Settlements', icon: Banknote },
 ] as const;
@@ -75,6 +88,7 @@ export default function Home() {
           <TabsContent value="policies" className="mt-0 focus-visible:outline-none"><PoliciesTab /></TabsContent>
           <TabsContent value="telemetry" className="mt-0 focus-visible:outline-none"><TelemetryTab /></TabsContent>
           <TabsContent value="weather" className="mt-0 focus-visible:outline-none"><WeatherTab /></TabsContent>
+          <TabsContent value="damagemap" className="mt-0 focus-visible:outline-none"><DamageMapTab /></TabsContent>
           <TabsContent value="claims" className="mt-0 focus-visible:outline-none"><ClaimsTab /></TabsContent>
           <TabsContent value="settlements" className="mt-0 focus-visible:outline-none"><SettlementsTab /></TabsContent>
         </Tabs>
