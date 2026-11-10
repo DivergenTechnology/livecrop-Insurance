@@ -114,6 +114,15 @@ model InsuranceClaim {
   lossSeverityRatio Float?
   status            String   @default("SUBMITTED") // SUBMITTED, ASSESSED, APPROVED, PAID, REJECTED
   evidenceUrl       String?
+  // ── VLM image analysis results (populated by /api/claims/analyze-image) ──
+  imageAnalysisSeverity      Float?  // 0.0–1.0 severity assessed by the vision model
+  imageAnalysisDamageType    String? // INJURY, DISEASE, MALNUTRITION, DEATH, OTHER, NONE
+  imageAnalysisConfidence    String? // LOW, MEDIUM, HIGH
+  imageAnalysisReasoning     String? // model's explanation
+  imageAnalysisSymptoms      String? // JSON array of visible symptoms
+  imageAnalysisRecommendation String? // REPLANT_ALLOWANCE, FULL_INDEMNITY, VETERINARY_INSPECTION, NO_CLAIM
+  imageAnalysisModel         String? // model identifier used
+  imageAnalysisAt            DateTime?
   createdAt         DateTime @default(now())
   settlement        Settlement?
 }

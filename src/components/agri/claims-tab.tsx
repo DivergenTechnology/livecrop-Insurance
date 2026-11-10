@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Plus, RefreshCw, Gavel, Check, X, Calculator } from 'lucide-react';
+import { Plus, RefreshCw, Gavel, Check, X, Calculator, ScanLine, ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,8 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
-import { apiFetch, fmtMoney, fmtDate, fmtDateTime, type Policy, type Claim, StatusBadge } from './shared';
+import { Badge } from '@/components/ui/badge';
+import { apiFetch, fmtMoney, fmtDate, fmtDateTime, type Policy, type Claim, type ImageAnalysisResult, StatusBadge } from './shared';
 import { SectionCard } from './shared';
+import { ImageUpload } from './image-upload';
 
 interface AssessmentResponse {
   claim: Claim;
@@ -43,10 +45,15 @@ export function ClaimsTab() {
     incidentDate: new Date().toISOString().slice(0, 10),
     damageDepth: 0.5,
   });
+  const [imageAnalysisApplied, setImageAnalysisApplied] = useState(false);
 
   const [assessingId, setAssessingId] = useState<string | null>(null);
   const [assessment, setAssessment] = useState<AssessmentResponse | null>(null);
   const [assessOpen, setAssessOpen] = useState(false);
+
+  // Image analysis dialog for existing claims
+  const [analyzeClaim, setAnalyzeClaim] = useState<Claim | null>(null);
+  const [analyzeOpen, setAnalyzeOpen] = useState(false);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -68,6 +75,11 @@ export function ClaimsTab() {
     void reload();
   }, [reload, refreshKey]);
 
+  // When the selected policy changes, reset the image-analysis-applied flag
+  useEffect(() => {
+    setImageAnalysisApplied(false);
+  }, [form.policyId]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.policyId) return toast.error('Please select a policy');
@@ -87,6 +99,7 @@ export function ClaimsTab() {
         description: `${created.assetType} claim · damage depth ${(created.damageDepthRatio * 100).toFixed(0)}%`,
       });
       setForm({ ...form, policyId: '' });
+      setImageAnalysisApplied(false);
       setOpen(false);
       setRefreshKey((k) => k + 1);
     } catch (e) {
@@ -94,6 +107,29 @@ export function ClaimsTab() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // When the VLM image analysis completes, auto-fill the damage depth slider
+  function handleImageAnalysisComplete(result: ImageAnalysisResult) {
+    const recommended = result.aggregate.recommendedDamageDepth;
+    setForm((f) => ({ ...f, damageDepth: recommended }));
+    setImageAnalysisApplied(true);
+    toast.info('Damage depth auto-filled from image analysis', {
+      description: `Set to ${(recommended * 100).toFixed(0)}% — adjust the slider if needed before filing.`,
+      duration: 6000,
+    });
+  }
+
+  // For existing claims: open the analyze dialog
+  function handleAnalyzeImage(claim: Claim) {
+    setAnalyzeClaim(claim);
+    setAnalyzeOpen(true);
+  }
+
+  // When the analyze dialog's VLM completes (for existing claims), refresh + close
+  function handleExistingClaimAnalysisComplete(_result: ImageAnalysisResult) {
+    setRefreshKey((k) => k + 1);
+    // Keep the dialog open so the user sees the result, but refresh the underlying table
   }
 
   async function handleAssess(claimId: string) {
@@ -142,11 +178,16 @@ export function ClaimsTab() {
     }
   }
 
+  // Get context for the VLM from the selected policy
+  const selectedPolicy = policies.find((p) => p.id === form.policyId);
+  const imageLivestockType = analyzeClaim?.policy?.livestock?.livestockType ?? selectedPolicy?.livestock?.livestockType ?? '';
+  const imageCategory = analyzeClaim?.policy?.livestock?.category ?? selectedPolicy?.livestock?.category ?? '';
+
   return (
     <>
       <SectionCard
         title="Claims"
-        description={`${claims.length} claims filed · loss engine uses FAO Ky factors per crop variety & growth stage`}
+        description={`${claims.length} claims filed · loss engine uses FAO Ky factors · VLM image analysis available for damage severity`}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => setRefreshKey((k) => k + 1)} disabled={loading}>
@@ -158,11 +199,11 @@ export function ClaimsTab() {
                   <Plus className="mr-2 h-4 w-4" /> File Claim
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-w-2xl">
                 <DialogHeader>
                   <DialogTitle>File an insurance claim</DialogTitle>
                   <DialogDescription>
-                    The system auto-determines the growth stage from the incident date and the policy&apos;s coverage start. The loss engine then computes the payout using the FAO Ky factor for that stage.
+                    The system auto-determines the growth stage from the incident date. Optionally upload livestock photos — the vision model assesses damage severity and auto-fills the slider below.
                   </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -184,6 +225,26 @@ export function ClaimsTab() {
                     <Input id="incident" type="date" value={form.incidentDate} onChange={(e) => setForm({ ...form, incidentDate: e.target.value })} />
                     <p className="text-xs text-slate-500">Used to compute days-since-coverage-start → growth stage.</p>
                   </div>
+
+                  {/* Image upload + VLM analysis — shown for all claim types, most useful for LIVESTOCK */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <ScanLine className="h-4 w-4 text-[#0C3B2E]" />
+                      Livestock damage photos (optional — AI-assisted severity)
+                    </Label>
+                    <ImageUpload
+                      compact
+                      livestockType={imageLivestockType}
+                      category={imageCategory}
+                      onAnalysisComplete={handleImageAnalysisComplete}
+                    />
+                    {imageAnalysisApplied && (
+                      <p className="text-xs text-emerald-700">
+                        ✓ Damage depth below auto-filled from the vision model&apos;s assessment. Adjust if needed.
+                      </p>
+                    )}
+                  </div>
+
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="damage">Damage depth</Label>
@@ -199,7 +260,10 @@ export function ClaimsTab() {
                       value={[Math.round(form.damageDepth * 100)]}
                       onValueChange={(v) => setForm({ ...form, damageDepth: v[0] / 100 })}
                     />
-                    <p className="text-xs text-slate-500">0 = no damage · 1 = total loss. Multiplied by the stage Ky factor to get the effective loss ratio.</p>
+                    <p className="text-xs text-slate-500">
+                      0 = no damage · 1 = total loss. Multiplied by the stage Ky factor to get the effective loss ratio.
+                      {imageAnalysisApplied && ' (auto-filled by VLM — adjust manually if needed)'}
+                    </p>
                   </div>
                   <DialogFooter>
                     <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
@@ -228,6 +292,7 @@ export function ClaimsTab() {
                   <TableHead>Incident</TableHead>
                   <TableHead>Stage</TableHead>
                   <TableHead className="text-right">Damage</TableHead>
+                  <TableHead>VLM</TableHead>
                   <TableHead className="text-right">Payout</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
@@ -245,25 +310,50 @@ export function ClaimsTab() {
                     <TableCell className="text-slate-500">{fmtDate(c.incidentDate)}</TableCell>
                     <TableCell className="text-slate-600">{c.growthStageAtLoss ?? '—'}</TableCell>
                     <TableCell className="text-right tabular-nums">{(c.damageDepthRatio * 100).toFixed(0)}%</TableCell>
+                    <TableCell>
+                      {c.imageAnalysisSeverity != null ? (
+                        <Badge variant="outline" className="border-[#0C3B2E]/30 bg-[#0C3B2E]/5 text-[#0C3B2E]" title={`VLM assessed: ${(c.imageAnalysisSeverity * 100).toFixed(0)}% severity, ${c.imageAnalysisDamageType}, ${c.imageAnalysisConfidence} confidence`}>
+                          <ImageIcon className="mr-1 h-3 w-3" />
+                          {(c.imageAnalysisSeverity * 100).toFixed(0)}%
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{c.calculatedPayout ? fmtMoney(c.calculatedPayout) : '—'}</TableCell>
                     <TableCell className="text-xs text-slate-500">{c.payoutType ?? '—'}</TableCell>
                     <TableCell><StatusBadge status={c.status} /></TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         {c.status === 'SUBMITTED' && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleAssess(c.id)}
-                            disabled={assessingId === c.id}
-                            title="Run loss engine"
-                          >
-                            {assessingId === c.id ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Calculator className="h-3.5 w-3.5" />}
-                            <span className="ml-1 hidden sm:inline">Assess</span>
-                          </Button>
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleAnalyzeImage(c)}
+                              title="Upload photos for VLM damage analysis"
+                              className="border-[#0C3B2E]/30 text-[#0C3B2E] hover:bg-[#0C3B2E]/5"
+                            >
+                              <ScanLine className="h-3.5 w-3.5" />
+                              <span className="ml-1 hidden md:inline">Analyze</span>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleAssess(c.id)}
+                              disabled={assessingId === c.id}
+                              title="Run loss engine"
+                            >
+                              {assessingId === c.id ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Calculator className="h-3.5 w-3.5" />}
+                              <span className="ml-1 hidden sm:inline">Assess</span>
+                            </Button>
+                          </>
                         )}
                         {c.status === 'ASSESSED' && (
                           <>
+                            <Button size="sm" variant="outline" onClick={() => handleAnalyzeImage(c)} title="Upload photos for VLM analysis" className="border-[#0C3B2E]/30 text-[#0C3B2E] hover:bg-[#0C3B2E]/5">
+                              <ScanLine className="h-3.5 w-3.5" />
+                            </Button>
                             <Button size="sm" variant="outline" onClick={() => handleAssess(c.id)} title="Re-assess">
                               <Calculator className="h-3.5 w-3.5" />
                             </Button>
@@ -295,6 +385,54 @@ export function ClaimsTab() {
         )}
       </SectionCard>
 
+      {/* VLM image analysis dialog for existing claims */}
+      <Dialog open={analyzeOpen} onOpenChange={(v) => { setAnalyzeOpen(v); if (!v) setAnalyzeClaim(null); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              <span className="inline-flex items-center gap-2">
+                <ScanLine className="h-5 w-5 text-[#0C3B2E]" /> VLM Damage Severity Analysis
+              </span>
+            </DialogTitle>
+            <DialogDescription>
+              {analyzeClaim && (
+                <>Claim {analyzeClaim.id.slice(-8)} · {analyzeClaim.assetType}
+                {analyzeClaim.policy?.livestock && ` · ${analyzeClaim.policy.livestock.livestockType} (${analyzeClaim.policy.livestock.uniqueTagId})`}
+                — upload photos and the vision model will assess the damage severity and update this claim.</>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {analyzeClaim && (
+            <ImageUpload
+              claimId={analyzeClaim.id}
+              livestockType={imageLivestockType}
+              category={imageCategory}
+              onAnalysisComplete={handleExistingClaimAnalysisComplete}
+            />
+          )}
+          {analyzeClaim?.imageAnalysisSeverity != null && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+              <p className="font-medium text-slate-700">Previous analysis on this claim:</p>
+              <div className="mt-1 flex flex-wrap gap-2">
+                <Badge variant="outline">Severity: {(analyzeClaim.imageAnalysisSeverity * 100).toFixed(0)}%</Badge>
+                <Badge variant="outline">Type: {analyzeClaim.imageAnalysisDamageType}</Badge>
+                <Badge variant="outline">Confidence: {analyzeClaim.imageAnalysisConfidence}</Badge>
+                <Badge variant="outline">Rec: {analyzeClaim.imageAnalysisRecommendation}</Badge>
+                {analyzeClaim.imageAnalysisAt && (
+                  <span className="text-slate-400">{fmtDateTime(analyzeClaim.imageAnalysisAt)}</span>
+                )}
+              </div>
+              {analyzeClaim.imageAnalysisReasoning && (
+                <p className="mt-2 text-slate-600">{analyzeClaim.imageAnalysisReasoning}</p>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => { setAnalyzeOpen(false); setAnalyzeClaim(null); }} className="bg-[#0C3B2E] text-white hover:bg-[#0C3B2E]/90">Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Assessment breakdown dialog */}
       <Dialog open={assessOpen} onOpenChange={setAssessOpen}>
         <DialogContent className="max-w-lg">
@@ -323,6 +461,21 @@ export function ClaimsTab() {
                   value={assessment.assessment.type === 'REPLANT_ALLOWANCE' ? 'Replant allowance' : 'Full indemnity'}
                 />
               </div>
+
+              {/* Show VLM analysis if present on the claim */}
+              {assessment.claim.imageAnalysisSeverity != null && (
+                <div className="rounded-lg border border-[#0C3B2E]/30 bg-[#0C3B2E]/5 p-3">
+                  <p className="mb-1 flex items-center gap-1 text-xs font-medium text-[#0C3B2E]">
+                    <ScanLine className="h-3.5 w-3.5" /> Vision model assessment
+                  </p>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <Badge variant="outline">Severity: {(assessment.claim.imageAnalysisSeverity * 100).toFixed(0)}%</Badge>
+                    <Badge variant="outline">{assessment.claim.imageAnalysisDamageType}</Badge>
+                    <Badge variant="outline">{assessment.claim.imageAnalysisConfidence} confidence</Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-600">{assessment.claim.imageAnalysisReasoning}</p>
+                </div>
+              )}
 
               {assessment.assessment.lossSeverityRatio !== undefined && (
                 <div>

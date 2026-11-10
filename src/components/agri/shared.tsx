@@ -125,9 +125,40 @@ export interface Claim {
   lossSeverityRatio: number | null;
   status: 'SUBMITTED' | 'ASSESSED' | 'APPROVED' | 'PAID' | 'REJECTED';
   evidenceUrl: string | null;
+  // VLM image analysis fields (populated by /api/claims/analyze-image)
+  imageAnalysisSeverity: number | null;
+  imageAnalysisDamageType: string | null;
+  imageAnalysisConfidence: string | null;
+  imageAnalysisReasoning: string | null;
+  imageAnalysisSymptoms: string | null; // JSON array string
+  imageAnalysisRecommendation: string | null;
+  imageAnalysisModel: string | null;
+  imageAnalysisAt: string | null;
   createdAt: string;
   policy?: Policy;
   settlement?: Settlement | null;
+}
+
+export interface ImageAnalysisResult {
+  analyses: Array<{
+    severity: number;
+    damageType: string;
+    confidence: string;
+    reasoning: string;
+    visibleSymptoms: string[];
+    recommendation: string;
+    imageName: string;
+    modelName: string;
+  }>;
+  aggregate: {
+    maxSeverity: number;
+    avgSeverity: number;
+    recommendedDamageDepth: number;
+    overallDamageType: string;
+    overallConfidence: string;
+    reasoning: string;
+  };
+  claim: Claim | null;
 }
 
 export interface Settlement {
@@ -161,10 +192,12 @@ export interface Dashboard {
 
 // ---------- Helpers ----------
 export async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
+  // For FormData bodies, let the browser set the Content-Type (with boundary) — don't force JSON.
+  const isFormData = init?.body instanceof FormData;
   const res = await fetch(url, {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(init?.headers ?? {}),
     },
   });
