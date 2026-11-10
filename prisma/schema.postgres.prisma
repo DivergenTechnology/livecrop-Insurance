@@ -1,0 +1,124 @@
+// Agricultural Insurance System — Prisma schema (PostgreSQL — production)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Farmer {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String
+  region    String
+  createdAt DateTime @default(now())
+  plots     FarmPlot[]
+  livestock LivestockAsset[]
+  policies  Policy[]
+}
+
+model FarmPlot {
+  id              String   @id @default(cuid())
+  farmerId        String
+  farmer          Farmer   @relation(fields: [farmerId], references: [id])
+  plotName        String
+  areaHectares    Float
+  boundaryGeoJson String   // GeoJSON polygon as JSON string
+  soilType        String?
+  createdAt       DateTime @default(now())
+  policies        Policy[]
+  telemetry       TelemetryReading[]
+}
+
+model LivestockAsset {
+  id              String   @id @default(cuid())
+  farmerId        String
+  farmer          Farmer   @relation(fields: [farmerId], references: [id])
+  category        String   // DAIRY, BEEF, POULTRY, SMALL_RUMINANT
+  uniqueTagId     String   @unique
+  muzzlePrintHash String?  // simulated 512-dim embedding as JSON string
+  declaredValue   Float
+  createdAt       DateTime @default(now())
+  policies        Policy[]
+}
+
+model CropVariety {
+  id       String   @id @default(cuid())
+  name     String   @unique
+  stages   CropStageVulnerability[]
+  policies Policy[]
+}
+
+model CropStageVulnerability {
+  id                String   @id @default(cuid())
+  varietyId         String
+  variety           CropVariety @relation(fields: [varietyId], references: [id])
+  stage             String   // EMERGENCE, VEGETATIVE, FLOWERING, MATURITY
+  startDayOffset    Int
+  endDayOffset      Int
+  stageKyFactor     Float
+  replantWindowFlag Boolean  @default(false)
+}
+
+model Policy {
+  id            String   @id @default(cuid())
+  farmerId      String
+  farmer        Farmer   @relation(fields: [farmerId], references: [id])
+  assetType     String   // CROP or LIVESTOCK
+  plotId        String?
+  plot          FarmPlot? @relation(fields: [plotId], references: [id])
+  livestockId   String?
+  livestock     LivestockAsset? @relation(fields: [livestockId], references: [id])
+  varietyId     String?
+  variety       CropVariety? @relation(fields: [varietyId], references: [id])
+  sumInsured    Float
+  inputCost     Float    @default(0)
+  premium       Float
+  coverageStart DateTime
+  coverageEnd   DateTime
+  status        String   @default("ACTIVE") // ACTIVE, EXPIRED, CANCELLED
+  createdAt     DateTime @default(now())
+  claims        InsuranceClaim[]
+}
+
+model TelemetryReading {
+  id        String   @id @default(cuid())
+  plotId    String
+  plot      FarmPlot @relation(fields: [plotId], references: [id])
+  timestamp DateTime
+  ndvi      Float
+  rainfall  Float
+  source    String   @default("SENTINEL_2")
+}
+
+model InsuranceClaim {
+  id                String   @id @default(cuid())
+  policyId          String
+  policy            Policy   @relation(fields: [policyId], references: [id])
+  assetType         String
+  incidentDate      DateTime
+  growthStageAtLoss String?
+  damageDepthRatio  Float
+  calculatedPayout  Float    @default(0)
+  payoutType        String?  // REPLANT_ALLOWANCE or FULL_INDEMNITY
+  lossSeverityRatio Float?
+  status            String   @default("SUBMITTED") // SUBMITTED, ASSESSED, APPROVED, PAID, REJECTED
+  evidenceUrl       String?
+  createdAt         DateTime @default(now())
+  settlement        Settlement?
+}
+
+model Settlement {
+  id        String   @id @default(cuid())
+  claimId   String   @unique
+  claim     InsuranceClaim @relation(fields: [claimId], references: [id])
+  payee     String
+  amount    Float
+  rail      String   // MPESA, MTN, AIRTEL
+  status    String   // PAID, FAILED
+  reference String?
+  createdAt DateTime @default(now())
+}

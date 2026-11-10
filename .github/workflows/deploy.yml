@@ -1,0 +1,98 @@
+# Production Deploy — builds and deploys to Vercel on every push to main.
+#
+# Required GitHub repository secrets (set under Settings → Secrets and variables → Actions):
+#   VERCEL_TOKEN       — personal access token from https://vercel.com/account/tokens
+#   VERCEL_ORG_ID      — your Vercel org/team ID (find in .vercel/project.json after `vercel link`)
+#   VERCEL_PROJECT_ID  — your Vercel project ID (find in .vercel/project.json after `vercel link`)
+#   DATABASE_URL       — production Postgres connection string (e.g. Neon: postgresql://...)
+#
+# IMPORTANT: This workflow NEVER commits to your repo. It swaps the Prisma
+# provider to postgresql in CI only, runs migrations against the production
+# DB, then deploys. Your local dev schema stays on SQLite.
+name: Deploy to Vercel
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch: {} # allow manual trigger from the Actions tab
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false # never cancel an in-flight production deploy
+
+jobs:
+  deploy:
+    name: Build + Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: bun
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # ── Switch Prisma to Postgres for production ──────────────────────
+      # Local dev uses SQLite (file-based, great for dev). Vercel serverless
+      # functions have an ephemeral filesystem, so production needs a real
+      # networked DB. We swap the provider here in CI without committing.
+      - name: Switch Prisma provider to postgresql
+        run: |
+          cp prisma/schema.postgres.prisma prisma/schema.prisma
+          echo "Active schema provider:"
+          grep 'provider = ' prisma/schema.prisma
+
+      - name: Generate Prisma client
+        run: bun run db:generate
+
+      - name: Push schema to production database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: bun run db:push
+
+      # ── Build with Vercel CLI ─────────────────────────────────────────
+      - name: Install Vercel CLI
+        run: bun add -g vercel@latest
+
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Build project artifacts
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Deploy to Vercel
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Deploy Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ Deploy succeeded. Check your Vercel dashboard for the live URL." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Deploy failed. Check the workflow logs above." >> $GITHUB_STEP_SUMMARY
+          fi
