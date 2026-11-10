@@ -113,6 +113,7 @@ async function main() {
   // Central Highlands: ~ -0.42, 36.95  (Nyeri area)
   // Rift Valley: ~ -0.28, 35.28       (Kericho area)
   // Coastal Region: ~ -3.20, 39.60    (Mombasa area)
+  const now = new Date();
   console.log('Seeding plots (with 2 overlapping)...');
   const plotA = rectPolygon(36.90, -0.45, 36.95, -0.40); // Plot 1
   const plotB = rectPolygon(36.93, -0.43, 36.98, -0.38); // Plot 2 — overlaps Plot 1
@@ -124,66 +125,90 @@ async function main() {
       data: {
         farmerId: farmers[0].id,
         plotName: 'Nyeri Highland Block A',
+        cropType: 'Maize',
+        plotDate: new Date(now.getTime() - 75 * 24 * 60 * 60 * 1000),
         areaHectares: 4.2,
         boundaryGeoJson: JSON.stringify(plotA),
         soilType: 'Volcanic loam',
+        fertilizerUsed: 'DAP + CAN',
       },
     }),
     db.farmPlot.create({
       data: {
         farmerId: farmers[0].id,
         plotName: 'Nyeri Highland Block B (overlapping)',
+        cropType: 'Maize',
+        plotDate: new Date(now.getTime() - 75 * 24 * 60 * 60 * 1000),
         areaHectares: 3.5,
         boundaryGeoJson: JSON.stringify(plotB),
         soilType: 'Volcanic loam',
+        fertilizerUsed: 'DAP + CAN',
       },
     }),
     db.farmPlot.create({
       data: {
         farmerId: farmers[1].id,
         plotName: 'Kericho Tea-Belt Field',
+        cropType: 'Wheat',
+        plotDate: new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000),
         areaHectares: 12.8,
         boundaryGeoJson: JSON.stringify(plotC),
         soilType: 'Red sandy loam',
+        fertilizerUsed: 'NPK 17-17-17',
       },
     }),
     db.farmPlot.create({
       data: {
         farmerId: farmers[2].id,
         plotName: 'Mombasa Coastal Plot',
+        cropType: 'Rice',
+        plotDate: new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000),
         areaHectares: 6.0,
         boundaryGeoJson: JSON.stringify(plotD),
         soilType: 'Sandy clay',
+        fertilizerUsed: 'Urea + Manure',
       },
     }),
   ]);
-  console.log(`  ✓ ${plots.length} plots (plots 1 & 2 overlap)`);
 
   // 4. Livestock. 1 dairy cow, 1 beef steer, 1 poultry flock.
+  //    New fields: livestockType, ageYears, headCount, registrationDate, declaredValue (per head).
   console.log('Seeding livestock...');
   const livestock = await Promise.all([
     db.livestockAsset.create({
       data: {
         farmerId: farmers[0].id,
+        livestockType: 'Cattle',
         category: 'DAIRY',
         uniqueTagId: 'COW-DAIRY-001',
+        ageYears: 4.5,
+        headCount: 1,
+        registrationDate: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
         declaredValue: 85000,
       },
     }),
     db.livestockAsset.create({
       data: {
         farmerId: farmers[1].id,
+        livestockType: 'Cattle',
         category: 'BEEF',
         uniqueTagId: 'STEER-BEEF-042',
+        ageYears: 2.0,
+        headCount: 1,
+        registrationDate: new Date(now.getTime() - 20 * 24 * 60 * 60 * 1000),
         declaredValue: 52000,
       },
     }),
     db.livestockAsset.create({
       data: {
         farmerId: farmers[2].id,
+        livestockType: 'Poultry',
         category: 'POULTRY',
         uniqueTagId: 'FLOCK-POULTRY-300',
-        declaredValue: 18000,
+        ageYears: 0.5,
+        headCount: 300,
+        registrationDate: new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000),
+        declaredValue: 600, // per head
       },
     }),
   ]);
@@ -191,7 +216,6 @@ async function main() {
 
   // 5. Policies. 1 crop, 1 livestock.
   console.log('Seeding policies...');
-  const now = new Date();
   const coverageStart = new Date(now);
   coverageStart.setDate(coverageStart.getDate() - 75); // ~75 days into the season → FLOWERING
   const coverageEnd = new Date(now);

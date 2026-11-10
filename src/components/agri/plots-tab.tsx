@@ -15,6 +15,9 @@ import { apiFetch, fmtDate, fmtDateTime, type Farmer, type Plot } from './shared
 import { SectionCard } from './shared';
 import { PlotPreview } from './plot-preview';
 
+const CROP_TYPES = ['Maize', 'Wheat', 'Rice', 'Soybean', 'Beans', 'Potato', 'Sorghum', 'Millet', 'Cassava', 'Tea', 'Coffee', 'Other'] as const;
+const FERTILIZER_OPTIONS = ['DAP', 'DAP + CAN', 'NPK 17-17-17', 'NPK 23-23-0', 'Urea', 'Urea + Manure', 'Manure', 'Compost', 'None'] as const;
+
 const SAMPLE_GEOJSON = `{
   "type": "Feature",
   "properties": {},
@@ -41,8 +44,11 @@ export function PlotsTab() {
   const [form, setForm] = useState({
     farmerId: '',
     plotName: '',
+    cropType: 'Maize' as (typeof CROP_TYPES)[number],
+    plotDate: '',
     areaHectares: '',
     soilType: '',
+    fertilizerUsed: 'DAP' as (typeof FERTILIZER_OPTIONS)[number],
     boundaryGeoJson: SAMPLE_GEOJSON,
   });
 
@@ -86,13 +92,18 @@ export function PlotsTab() {
         body: JSON.stringify({
           farmerId: form.farmerId,
           plotName: form.plotName,
+          cropType: form.cropType || null,
+          plotDate: form.plotDate || null,
           areaHectares: Number(form.areaHectares) || 0,
           soilType: form.soilType || null,
+          fertilizerUsed: form.fertilizerUsed || null,
           boundaryGeoJson: parsed,
         }),
       });
-      toast.success('Plot registered', { description: `${created.plotName} · ${created.areaHectares} ha` });
-      setForm({ farmerId: '', plotName: '', areaHectares: '', soilType: '', boundaryGeoJson: SAMPLE_GEOJSON });
+      toast.success('Plot registered', {
+        description: `${created.plotName} · ${created.cropType ?? '—'} · ${created.areaHectares} ha · ${created.fertilizerUsed ?? 'no fertilizer'}`,
+      });
+      setForm({ farmerId: '', plotName: '', cropType: 'Maize', plotDate: '', areaHectares: '', soilType: '', fertilizerUsed: 'DAP', boundaryGeoJson: SAMPLE_GEOJSON });
       setOpen(false);
       setRefreshKey((k) => k + 1);
     } catch (e) {
@@ -139,7 +150,7 @@ export function PlotsTab() {
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="farmer">Farmer</Label>
+                      <Label htmlFor="farmer">Farmer name</Label>
                       <Select value={form.farmerId} onValueChange={(v) => setForm({ ...form, farmerId: v })}>
                         <SelectTrigger id="farmer"><SelectValue placeholder="Select farmer" /></SelectTrigger>
                         <SelectContent>
@@ -154,12 +165,38 @@ export function PlotsTab() {
                       <Input id="plotName" value={form.plotName} onChange={(e) => setForm({ ...form, plotName: e.target.value })} placeholder="e.g. Nyeri Highland Block C" />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="area">Area (hectares)</Label>
+                      <Label htmlFor="cropType">Type of crop</Label>
+                      <Select value={form.cropType} onValueChange={(v) => setForm({ ...form, cropType: v as (typeof CROP_TYPES)[number] })}>
+                        <SelectTrigger id="cropType"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {CROP_TYPES.map((c) => (
+                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="plotDate">Plotted date</Label>
+                      <Input id="plotDate" type="date" value={form.plotDate} onChange={(e) => setForm({ ...form, plotDate: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="area">Size (hectares)</Label>
                       <Input id="area" type="number" step="0.01" value={form.areaHectares} onChange={(e) => setForm({ ...form, areaHectares: e.target.value })} placeholder="auto-computed if omitted" />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="soil">Soil type (optional)</Label>
+                      <Label htmlFor="soil">Soil type</Label>
                       <Input id="soil" value={form.soilType} onChange={(e) => setForm({ ...form, soilType: e.target.value })} placeholder="e.g. Volcanic loam" />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="fertilizer">Fertilizer used</Label>
+                      <Select value={form.fertilizerUsed} onValueChange={(v) => setForm({ ...form, fertilizerUsed: v as (typeof FERTILIZER_OPTIONS)[number] })}>
+                        <SelectTrigger id="fertilizer"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {FERTILIZER_OPTIONS.map((f) => (
+                            <SelectItem key={f} value={f}>{f}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -197,11 +234,12 @@ export function PlotsTab() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Plot</TableHead>
+                  <TableHead>Crop</TableHead>
                   <TableHead>Farmer</TableHead>
-                  <TableHead>Region</TableHead>
-                  <TableHead className="text-right">Area (ha)</TableHead>
+                  <TableHead>Plotted date</TableHead>
+                  <TableHead className="text-right">Size (ha)</TableHead>
                   <TableHead>Soil</TableHead>
-                  <TableHead>Created</TableHead>
+                  <TableHead>Fertilizer</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -211,11 +249,16 @@ export function PlotsTab() {
                   return (
                     <TableRow key={p.id}>
                       <TableCell className="font-medium text-slate-900">{p.plotName}</TableCell>
+                      <TableCell>
+                        {p.cropType ? (
+                          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">{p.cropType}</Badge>
+                        ) : '—'}
+                      </TableCell>
                       <TableCell>{p.farmer?.name ?? '—'}</TableCell>
-                      <TableCell className="text-slate-600">{p.farmer?.region ?? '—'}</TableCell>
+                      <TableCell className="text-slate-600">{p.plotDate ? fmtDate(p.plotDate) : '—'}</TableCell>
                       <TableCell className="text-right tabular-nums">{p.areaHectares}</TableCell>
                       <TableCell className="text-slate-600">{p.soilType ?? '—'}</TableCell>
-                      <TableCell className="text-slate-500">{fmtDate(p.createdAt)}</TableCell>
+                      <TableCell className="text-slate-600">{p.fertilizerUsed ?? '—'}</TableCell>
                       <TableCell>
                         {overlap ? (
                           <Badge variant="outline" className="border-rose-200 bg-rose-100 text-rose-700">

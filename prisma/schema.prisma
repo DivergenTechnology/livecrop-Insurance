@@ -25,9 +25,12 @@ model FarmPlot {
   farmerId        String
   farmer          Farmer   @relation(fields: [farmerId], references: [id])
   plotName        String
+  cropType        String?  // e.g. Maize, Wheat, Rice, Soybean
+  plotDate        DateTime? // date the plot was planted/established
   areaHectares    Float
   boundaryGeoJson String   // GeoJSON polygon as JSON string
   soilType        String?
+  fertilizerUsed  String?  // e.g. DAP, NPK 17-17-17, Manure, None
   createdAt       DateTime @default(now())
   policies        Policy[]
   telemetry       TelemetryReading[]
@@ -37,10 +40,14 @@ model LivestockAsset {
   id              String   @id @default(cuid())
   farmerId        String
   farmer          Farmer   @relation(fields: [farmerId], references: [id])
-  category        String   // DAIRY, BEEF, POULTRY, SMALL_RUMINANT
+  livestockType   String   // e.g. Cattle, Goat, Sheep, Poultry, Pig
+  category        String   // DAIRY, BEEF, POULTRY, SMALL_RUMINANT (legacy bucket)
   uniqueTagId     String   @unique
+  ageYears        Float?   // age of the animal(s) in years
+  headCount       Int      @default(1) // number of animals in this asset record
+  registrationDate DateTime? // date the livestock was registered/acquired
   muzzlePrintHash String?  // simulated 512-dim embedding as JSON string
-  declaredValue   Float
+  declaredValue   Float    // estimated price per head (KES)
   createdAt       DateTime @default(now())
   policies        Policy[]
 }

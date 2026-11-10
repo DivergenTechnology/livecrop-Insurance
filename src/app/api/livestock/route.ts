@@ -17,11 +17,21 @@ type Category = (typeof CATEGORIES)[number];
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { farmerId, category, uniqueTagId, declaredValue } = body ?? {};
+  const {
+    farmerId,
+    livestockType,
+    category,
+    uniqueTagId,
+    ageYears,
+    headCount,
+    registrationDate,
+    declaredValue,
+  } = body ?? {};
 
-  if (!farmerId || !category || !uniqueTagId || typeof declaredValue !== 'number') {
+  // Required: farmerId, livestockType, category, uniqueTagId, declaredValue
+  if (!farmerId || !livestockType || !category || !uniqueTagId || typeof declaredValue !== 'number') {
     return NextResponse.json(
-      { error: 'farmerId, category, uniqueTagId, declaredValue are required' },
+      { error: 'farmerId, livestockType, category, uniqueTagId, declaredValue are required' },
       { status: 400 },
     );
   }
@@ -48,11 +58,22 @@ export async function POST(req: NextRequest) {
   });
   const dup = findDuplicate(muzzle, existing, 0.95);
 
+  // Parse optional date field.
+  let parsedDate: Date | null = null;
+  if (registrationDate) {
+    const d = new Date(registrationDate);
+    if (!Number.isNaN(d.getTime())) parsedDate = d;
+  }
+
   const created = await db.livestockAsset.create({
     data: {
       farmerId,
+      livestockType,
       category,
       uniqueTagId,
+      ageYears: typeof ageYears === 'number' ? ageYears : null,
+      headCount: typeof headCount === 'number' ? Math.max(1, Math.floor(headCount)) : 1,
+      registrationDate: parsedDate,
       declaredValue,
       muzzlePrintHash: JSON.stringify(muzzle),
     },

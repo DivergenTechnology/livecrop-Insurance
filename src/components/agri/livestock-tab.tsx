@@ -13,6 +13,7 @@ import { apiFetch, fmtMoney, fmtDate, fmtDateTime, type Farmer, type Livestock, 
 import { SectionCard } from './shared';
 
 const CATEGORIES = ['DAIRY', 'BEEF', 'POULTRY', 'SMALL_RUMINANT'] as const;
+const LIVESTOCK_TYPES = ['Cattle', 'Goat', 'Sheep', 'Poultry', 'Pig', 'Donkey', 'Camel'] as const;
 
 export function LivestockTab() {
   const [items, setItems] = useState<Livestock[]>([]);
@@ -24,8 +25,12 @@ export function LivestockTab() {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
     farmerId: '',
+    livestockType: 'Cattle' as (typeof LIVESTOCK_TYPES)[number],
     category: 'DAIRY' as (typeof CATEGORIES)[number],
     uniqueTagId: '',
+    ageYears: '',
+    headCount: '1',
+    registrationDate: '',
     declaredValue: '',
   });
 
@@ -51,9 +56,9 @@ export function LivestockTab() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.farmerId) return toast.error('Please select a farmer');
+    if (!form.farmerId) return toast.error('Please select an owner');
     if (!form.uniqueTagId) return toast.error('Tag ID is required');
-    if (!form.declaredValue) return toast.error('Declared value is required');
+    if (!form.declaredValue) return toast.error('Estimated price per head is required');
 
     setSubmitting(true);
     try {
@@ -63,8 +68,12 @@ export function LivestockTab() {
           method: 'POST',
           body: JSON.stringify({
             farmerId: form.farmerId,
+            livestockType: form.livestockType,
             category: form.category,
             uniqueTagId: form.uniqueTagId,
+            ageYears: form.ageYears ? Number(form.ageYears) : null,
+            headCount: Number(form.headCount) || 1,
+            registrationDate: form.registrationDate || null,
             declaredValue: Number(form.declaredValue),
           }),
         },
@@ -77,10 +86,10 @@ export function LivestockTab() {
         });
       } else {
         toast.success('Livestock registered', {
-          description: `${created.uniqueTagId} · ${created.category} · ${fmtMoney(created.declaredValue)}`,
+          description: `${created.livestockType} · ${created.uniqueTagId} · ${fmtMoney(created.declaredValue)}/head × ${created.headCount}`,
         });
       }
-      setForm({ farmerId: '', category: 'DAIRY', uniqueTagId: '', declaredValue: '' });
+      setForm({ farmerId: '', livestockType: 'Cattle', category: 'DAIRY', uniqueTagId: '', ageYears: '', headCount: '1', registrationDate: '', declaredValue: '' });
       setOpen(false);
       setRefreshKey((k) => k + 1);
     } catch (e) {
@@ -132,9 +141,9 @@ export function LivestockTab() {
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="farmer">Farmer</Label>
+                  <Label htmlFor="farmer">Owner name</Label>
                   <Select value={form.farmerId} onValueChange={(v) => setForm({ ...form, farmerId: v })}>
-                    <SelectTrigger id="farmer"><SelectValue placeholder="Select farmer" /></SelectTrigger>
+                    <SelectTrigger id="farmer"><SelectValue placeholder="Select owner" /></SelectTrigger>
                     <SelectContent>
                       {farmers.map((f) => (
                         <SelectItem key={f.id} value={f.id}>{f.name} · {f.region}</SelectItem>
@@ -142,16 +151,43 @@ export function LivestockTab() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="category">Category</Label>
-                  <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v as (typeof CATEGORIES)[number] })}>
-                    <SelectTrigger id="category"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {CATEGORIES.map((c) => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="livestockType">Type of livestock</Label>
+                    <Select value={form.livestockType} onValueChange={(v) => setForm({ ...form, livestockType: v as (typeof LIVESTOCK_TYPES)[number] })}>
+                      <SelectTrigger id="livestockType"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {LIVESTOCK_TYPES.map((t) => (
+                          <SelectItem key={t} value={t}>{t}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="category">Category</Label>
+                    <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v as (typeof CATEGORIES)[number] })}>
+                      <SelectTrigger id="category"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {CATEGORIES.map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="age">Age (years)</Label>
+                    <Input id="age" type="number" step="0.1" min="0" value={form.ageYears} onChange={(e) => setForm({ ...form, ageYears: e.target.value })} placeholder="e.g. 4.5" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="headCount">Numbers (head)</Label>
+                    <Input id="headCount" type="number" min="1" value={form.headCount} onChange={(e) => setForm({ ...form, headCount: e.target.value })} placeholder="e.g. 1" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="registrationDate">Date</Label>
+                    <Input id="registrationDate" type="date" value={form.registrationDate} onChange={(e) => setForm({ ...form, registrationDate: e.target.value })} />
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
@@ -159,7 +195,7 @@ export function LivestockTab() {
                     <Input id="tag" value={form.uniqueTagId} onChange={(e) => setForm({ ...form, uniqueTagId: e.target.value })} placeholder="e.g. COW-DAIRY-002" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="value">Declared value (KES)</Label>
+                    <Label htmlFor="value">Estimated price (KES / head)</Label>
                     <Input id="value" type="number" value={form.declaredValue} onChange={(e) => setForm({ ...form, declaredValue: e.target.value })} placeholder="e.g. 75000" />
                   </div>
                 </div>
@@ -184,37 +220,46 @@ export function LivestockTab() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Tag ID</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>Category</TableHead>
-                <TableHead>Farmer</TableHead>
-                <TableHead>Region</TableHead>
-                <TableHead className="text-right">Declared value</TableHead>
+                <TableHead>Owner</TableHead>
+                <TableHead>Tag ID</TableHead>
+                <TableHead className="text-right">Age (yrs)</TableHead>
+                <TableHead className="text-right">Numbers</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead className="text-right">Price/head</TableHead>
+                <TableHead className="text-right">Total value</TableHead>
                 <TableHead>Muzzle print</TableHead>
-                <TableHead>Registered</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((l) => (
-                <TableRow key={l.id}>
-                  <TableCell className="font-mono text-xs font-medium text-slate-900">{l.uniqueTagId}</TableCell>
-                  <TableCell><CategoryBadge category={l.category} /></TableCell>
-                  <TableCell>{l.farmer?.name ?? '—'}</TableCell>
-                  <TableCell className="text-slate-600">{l.farmer?.region ?? '—'}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmtMoney(l.declaredValue)}</TableCell>
-                  <TableCell>
-                    <span className="inline-flex items-center gap-1 font-mono text-[11px] text-slate-500">
-                      <Fingerprint className="h-3 w-3" />
-                      {muzzleSnippet(l.muzzlePrintHash)}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-slate-500">{fmtDate(l.createdAt)}</TableCell>
-                </TableRow>
-              ))}
+              {items.map((l) => {
+                const totalValue = (l.declaredValue ?? 0) * (l.headCount ?? 1);
+                return (
+                  <TableRow key={l.id}>
+                    <TableCell className="font-medium text-slate-900">{l.livestockType ?? '—'}</TableCell>
+                    <TableCell><CategoryBadge category={l.category} /></TableCell>
+                    <TableCell>{l.farmer?.name ?? '—'}</TableCell>
+                    <TableCell className="font-mono text-xs text-slate-700">{l.uniqueTagId}</TableCell>
+                    <TableCell className="text-right tabular-nums">{l.ageYears != null ? l.ageYears.toFixed(1) : '—'}</TableCell>
+                    <TableCell className="text-right tabular-nums">{l.headCount}</TableCell>
+                    <TableCell className="text-slate-600">{l.registrationDate ? fmtDate(l.registrationDate) : '—'}</TableCell>
+                    <TableCell className="text-right tabular-nums">{fmtMoney(l.declaredValue)}</TableCell>
+                    <TableCell className="text-right tabular-nums font-medium">{fmtMoney(totalValue)}</TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center gap-1 font-mono text-[11px] text-slate-500">
+                        <Fingerprint className="h-3 w-3" />
+                        {muzzleSnippet(l.muzzlePrintHash)}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
           <p className="mt-3 text-xs text-slate-400">
             <Copy className="mr-1 inline h-3 w-3" />
-            Muzzle embeddings are deterministic per tag ID — registering the same tag twice (with a different ID) will still produce a near-identical vector, which the duplicate detector catches.
+            Muzzle embeddings are deterministic per tag ID — registering the same tag twice (with a different ID) will still produce a near-identical vector, which the duplicate detector catches. Total value = price/head × numbers.
           </p>
         </div>
       )}

@@ -19,9 +19,12 @@ export interface Plot {
   id: string;
   farmerId: string;
   plotName: string;
+  cropType: string | null;
+  plotDate: string | null;
   areaHectares: number;
   boundaryGeoJson: string;
   soilType: string | null;
+  fertilizerUsed: string | null;
   createdAt: string;
   farmer?: { id: string; name: string; region: string };
   overlappingIds?: string[];
@@ -30,10 +33,14 @@ export interface Plot {
 export interface Livestock {
   id: string;
   farmerId: string;
+  livestockType: string;
   category: 'DAIRY' | 'BEEF' | 'POULTRY' | 'SMALL_RUMINANT';
   uniqueTagId: string;
+  ageYears: number | null;
+  headCount: number;
+  registrationDate: string | null;
   muzzlePrintHash: string | null;
-  declaredValue: number;
+  declaredValue: number; // estimated price per head (KES)
   createdAt: string;
   farmer?: { id: string; name: string; region: string };
 }

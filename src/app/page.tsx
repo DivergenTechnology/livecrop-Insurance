@@ -1,6 +1,6 @@
 'use client';
 
-import { Sprout, LayoutDashboard, Map, Beef, FileText, Satellite, Gavel, Banknote, Leaf } from 'lucide-react';
+import { Sprout, LayoutDashboard, Map, Beef, FileText, Satellite, Gavel, Banknote, Leaf, CloudSun } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DashboardTab } from '@/components/agri/dashboard-tab';
 import { PlotsTab } from '@/components/agri/plots-tab';
@@ -9,6 +9,7 @@ import { PoliciesTab } from '@/components/agri/policies-tab';
 import { TelemetryTab } from '@/components/agri/telemetry-tab';
 import { ClaimsTab } from '@/components/agri/claims-tab';
 import { SettlementsTab } from '@/components/agri/settlements-tab';
+import { WeatherTab } from '@/components/agri/weather-tab';
 
 const TABS = [
   { value: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -16,6 +17,7 @@ const TABS = [
   { value: 'livestock', label: 'Livestock', icon: Beef },
   { value: 'policies', label: 'Policies', icon: FileText },
   { value: 'telemetry', label: 'Telemetry', icon: Satellite },
+  { value: 'weather', label: 'Weather', icon: CloudSun },
   { value: 'claims', label: 'Claims', icon: Gavel },
   { value: 'settlements', label: 'Settlements', icon: Banknote },
 ] as const;
@@ -39,6 +41,7 @@ export default function Home() {
             <span className="inline-flex items-center gap-1"><Leaf className="h-3 w-3" /> Spatial plot registry</span>
             <span className="inline-flex items-center gap-1"><Beef className="h-3 w-3" /> Biometric livestock identity</span>
             <span className="inline-flex items-center gap-1"><Satellite className="h-3 w-3" /> Sentinel-2 telemetry oracle</span>
+            <span className="inline-flex items-center gap-1"><CloudSun className="h-3 w-3" /> Real-time weather (Open-Meteo)</span>
             <span className="inline-flex items-center gap-1"><Gavel className="h-3 w-3" /> Stage × depth loss engine</span>
             <span className="inline-flex items-center gap-1"><Banknote className="h-3 w-3" /> Mobile money settlement</span>
           </div>
@@ -71,6 +74,7 @@ export default function Home() {
           <TabsContent value="livestock" className="mt-0 focus-visible:outline-none"><LivestockTab /></TabsContent>
           <TabsContent value="policies" className="mt-0 focus-visible:outline-none"><PoliciesTab /></TabsContent>
           <TabsContent value="telemetry" className="mt-0 focus-visible:outline-none"><TelemetryTab /></TabsContent>
+          <TabsContent value="weather" className="mt-0 focus-visible:outline-none"><WeatherTab /></TabsContent>
           <TabsContent value="claims" className="mt-0 focus-visible:outline-none"><ClaimsTab /></TabsContent>
           <TabsContent value="settlements" className="mt-0 focus-visible:outline-none"><SettlementsTab /></TabsContent>
         </Tabs>

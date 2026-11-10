@@ -69,7 +69,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { farmerId, plotName, areaHectares, boundaryGeoJson, soilType } = body ?? {};
+  const { farmerId, plotName, cropType, plotDate, areaHectares, boundaryGeoJson, soilType, fertilizerUsed } = body ?? {};
 
   if (!farmerId || !plotName || typeof areaHectares !== 'number' || !boundaryGeoJson) {
     return NextResponse.json(
@@ -125,13 +125,23 @@ export async function POST(req: NextRequest) {
     // keep provided area
   }
 
+  // Parse optional plot date.
+  let parsedPlotDate: Date | null = null;
+  if (plotDate) {
+    const d = new Date(plotDate);
+    if (!Number.isNaN(d.getTime())) parsedPlotDate = d;
+  }
+
   const plot = await db.farmPlot.create({
     data: {
       farmerId,
       plotName,
+      cropType: cropType || null,
+      plotDate: parsedPlotDate,
       areaHectares: computedArea,
       boundaryGeoJson: JSON.stringify(geoJsonObj),
       soilType: soilType ?? null,
+      fertilizerUsed: fertilizerUsed || null,
     },
     include: { farmer: true },
   });
