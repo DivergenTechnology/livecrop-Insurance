@@ -1,6 +1,6 @@
 'use client';
 
-import { Sprout, LayoutDashboard, Map, Beef, FileText, Satellite, Gavel, Banknote, Leaf, CloudSun, MapPinned } from 'lucide-react';
+import { Sprout, LayoutDashboard, Map, Beef, FileText, Satellite, Gavel, Banknote, Leaf, CloudSun, MapPinned, BarChart3 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import dynamic from 'next/dynamic';
 import { DashboardTab } from '@/components/agri/dashboard-tab';
@@ -11,6 +11,7 @@ import { TelemetryTab } from '@/components/agri/telemetry-tab';
 import { ClaimsTab } from '@/components/agri/claims-tab';
 import { SettlementsTab } from '@/components/agri/settlements-tab';
 import { WeatherTab } from '@/components/agri/weather-tab';
+import { AnalyticsTab } from '@/components/agri/analytics-tab';
 
 // Leaflet requires window — load the DamageMap only on the client.
 const DamageMapTab = dynamic(() => import('@/components/agri/damage-map-tab').then((m) => m.DamageMapTab), {
@@ -33,6 +34,7 @@ const TABS = [
   { value: 'damagemap', label: 'Damage Map', icon: MapPinned },
   { value: 'claims', label: 'Claims', icon: Gavel },
   { value: 'settlements', label: 'Settlements', icon: Banknote },
+  { value: 'analytics', label: 'Analytics', icon: BarChart3 },
 ] as const;
 
 export default function Home() {
@@ -91,6 +93,7 @@ export default function Home() {
           <TabsContent value="damagemap" className="mt-0 focus-visible:outline-none"><DamageMapTab /></TabsContent>
           <TabsContent value="claims" className="mt-0 focus-visible:outline-none"><ClaimsTab /></TabsContent>
           <TabsContent value="settlements" className="mt-0 focus-visible:outline-none"><SettlementsTab /></TabsContent>
+          <TabsContent value="analytics" className="mt-0 focus-visible:outline-none"><AnalyticsTab /></TabsContent>
         </Tabs>
       </main>
 
